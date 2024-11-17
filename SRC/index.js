@@ -6,6 +6,8 @@ let addressIds = [];
 let branchIds = [];
 let userIds = [];
 let clientIds = [];
+let staffRoleIds = [];
+let singleStaffRoleIds = [];
 let staffIds = [];
 
 function getRandomName() {
@@ -93,6 +95,47 @@ async function createBranches(count) {
     }
 }
 
+async function createStaffRoles() {
+    const roles = [
+        {name: "Bank Teller", base_salary: 35_000},
+        {name: "Customer Service Representative", base_salary: 40_000},
+        {name: "Personal Banker", base_salary: 50_000},
+        {name: "Loan Officer", base_salary: 60_000},
+        {name: "Branch Manager", base_salary: 80_000},
+        {name: "Financial Analyst", base_salary: 70_000},
+        {name: "Investment Banker", base_salary: 100_000},
+        {name: "Risk Analyst", base_salary: 75_000},
+        {name: "Compliance Officer", base_salary: 70_000},
+        {name: "IT Specialist", base_salary: 80_000}
+    ]
+    const singleStaffRoles = [
+        {name: "Vice President (VP) of Operations", base_salary: 120_000},
+        {name: "Chief Financial Officer (CFO)", base_salary: 200_000},
+        {name: "Chief Technology Officer (CTO)", base_salary: 200_000},
+        {name: "Chief Executive Officer (CEO)", base_salary: 300_000}
+    ]
+    const allRoles = roles.concat(singleStaffRoles);
+
+    const client = await createClient();
+    await client.connect();
+    const res = await client.query(
+        `INSERT INTO wob.staff_role(name, base_salary)
+         SELECT name, base_salary
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                name text
+                , base_salary integer
+             )
+         RETURNING staff_role_id;`,
+        [JSON.stringify(allRoles)]
+    );
+    await client.end();
+
+    const allStaffRoleIds = res.rows.map(row => row.staff_role_id);
+    staffRoleIds = allStaffRoleIds.slice(0, -4);
+    singleStaffRoleIds = allStaffRoleIds.slice(-4);
+}
+
 async function hashPassword(password) {
     const salt = process.env.SALT;
     const msgBuffer = new TextEncoder().encode(salt + password);
@@ -142,7 +185,6 @@ async function createUsers() {
     });
 
     const clients = users.filter(user => user.type === "client");
-
     clients.forEach(client => {
         client.student_number = 251_000_000 + Math.floor(Math.random() * 999_999);
         client.status = Math.random() >= 0.3 ? "active" : "inactive";
@@ -166,15 +208,39 @@ async function createUsers() {
     clientIds = res.rows.map(row => row.client_id);
 
     const staff = users.filter(user => user.type === "staff");
-
     staff.forEach(staffMember => {
-
+        staffMember.staff_role_id = staffRoleIds[Math.floor(Math.random() * staffRoleIds.length)];
+        staffMember.status = Math.random() >= 0.3 ? "active" : "inactive";
+        staffMember.branch_id = branchIds[Math.floor(Math.random() * branchIds.length)];
     });
+    staff[0].staff_role_id = singleStaffRoleIds[0];
+    staff[1].staff_role_id = singleStaffRoleIds[1];
+    staff[2].staff_role_id = singleStaffRoleIds[2];
+    staff[3].staff_role_id = singleStaffRoleIds[3];
+
+    client = await createClient();
+    await client.connect();
+    res = await client.query(
+        `INSERT INTO wob.staff(staff_role_id, status, user_id, branch_id)
+         SELECT staff_role_id, status, user_id, branch_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                staff_role_id uuid
+                , status text
+                , user_id uuid
+                , branch_id uuid
+             )
+         RETURNING staff_id, staff_role_id;`,
+        [JSON.stringify(staff)]
+    );
+    await client.end();
+    staffIds = res.rows.map(row => row.staff_id);
 }
 
 async function main() {
     await createAddresses(81).then(_ => console.log("done creating addresses"));
     await createBranches(1).then(_ => console.log("done creating branches"));
+    await createStaffRoles().then(_ => console.log("done creating staff roles"));
     await createUsers().then(_ => console.log("done creating users"));
 }
 
