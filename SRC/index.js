@@ -10,6 +10,16 @@ let staffRoleIds = [];
 let singleStaffRoleIds = [];
 let staffIds = [];
 
+async function truncateAllTables() {
+    const client = await createClient();
+    await client.connect();
+    await client.query(
+        `SELECT wob.truncate_tables($1, $2);`,
+        [process.env.DB_USER, process.env.DB_SCHEMA]
+    );
+    await client.end();
+}
+
 function getRandomName() {
     const hasMiddleName = Math.random() > 0.5;
     return random.first() + (hasMiddleName ? " " + random.middle() : "") + " " + random.last();
@@ -238,6 +248,7 @@ async function createUsers() {
 }
 
 async function main() {
+    await truncateAllTables().then(_ => console.log("done truncating tables"));
     await createAddresses(81).then(_ => console.log("done creating addresses"));
     await createBranches(1).then(_ => console.log("done creating branches"));
     await createStaffRoles().then(_ => console.log("done creating staff roles"));
