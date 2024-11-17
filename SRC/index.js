@@ -240,7 +240,7 @@ async function createUsers() {
                 , user_id uuid
                 , branch_id uuid
              )
-         RETURNING staff_id, staff_role_id;`,
+         RETURNING staff_id;`,
         [JSON.stringify(staff)]
     );
     await client.end();
