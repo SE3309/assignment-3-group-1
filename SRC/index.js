@@ -9,6 +9,7 @@ let clientIds = [];
 let staffRoleIds = [];
 let singleStaffRoleIds = [];
 let staffIds = [];
+let accountTypeIds = [];
 
 async function truncateAllTables() {
     const client = await createClient();
@@ -247,12 +248,98 @@ async function createUsers() {
     staffIds = res.rows.map(row => row.staff_id);
 }
 
+async function createAccountTypes() {
+    const accountTypes = [
+        {name: "Chequing", interest_rate: 0.0065, interest_type: "simple"},
+        {name: "Savings", interest_rate: 0.0350, interest_type: "simple"},
+        {name: "TFSA", interest_rate: 0.0275, interest_type: "compound"},
+        {name: "RRSP", interest_rate: 0.0150, interest_type: "compound"},
+        {name: "GIC", interest_rate: 0.0365, interest_type: "compound"}
+    ];
+
+    const client = await createClient();
+    await client.connect();
+    for (const accountType of accountTypes) {
+        let res = await client.query(
+            `INSERT INTO wob.interest(interest_rate, interest_type)
+             VALUES ($1, $2)
+             RETURNING interest_id;`,
+            [accountType.interest_rate, accountType.interest_type]
+        );
+        const interestId = res.rows[0].interest_id;
+
+        res = await client.query(
+            `INSERT INTO wob.account_type(name, interest_id)
+             VALUES ($1, $2)
+             RETURNING account_type_id;`,
+            [accountType.name, interestId]
+        );
+        accountTypeIds.push(res.rows[0].account_type_id);
+    }
+    await client.end();
+}
+
+async function createAccounts() {
+    const accounts = [];
+    clientIds.forEach(clientId => {
+        const clientAccounts = {
+            chequing: Math.floor(Math.random() * 3),
+            savings: Math.floor(Math.random() * 4),
+            tfsa: Math.random() >= 0.5 ? 1 : 0,
+            rrsp: Math.random() >= 0.5 ? 1 : 0,
+            gic: Math.random() >= 0.5 ? 1 : 0
+        };
+
+        for (const [accountType, count] of Object.entries(clientAccounts)) {
+            for (let i = 0; i < count; i++) {
+                let accountTypeId;
+                if (accountType === "chequing") accountTypeId = accountTypeIds[0];
+                else if (accountType === "savings") accountTypeId = accountTypeIds[1];
+                else if (accountType === "tfsa") accountTypeId = accountTypeIds[2];
+                else if (accountType === "rrsp") accountTypeId = accountTypeIds[3];
+                else if (accountType === "gic") accountTypeId = accountTypeIds[4];
+
+                const account = {
+                    account_type_id: accountTypeId,
+                    client_id: clientId,
+                    balance: Math.random() * 1_000_000 + 100,
+                    status: "active",
+                    branch_id: branchIds[Math.floor(Math.random() * branchIds.length)]
+                }
+                accounts.push(account);
+            }
+        }
+    });
+
+    const client = await createClient();
+    await client.connect();
+    const res = await client.query(
+        `INSERT INTO wob.account(account_type_id, client_id, balance, status, branch_id)
+         SELECT account_type_id, client_id, balance, status, branch_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                account_type_id uuid
+                , client_id uuid
+                , balance money
+                , status text
+                , branch_id uuid
+             )
+         RETURNING account_id;`,
+        [JSON.stringify(accounts)]
+    );
+    await client.end();
+}
+
 async function main() {
     await truncateAllTables().then(_ => console.log("done truncating tables"));
+
     await createAddresses(81).then(_ => console.log("done creating addresses"));
     await createBranches(1).then(_ => console.log("done creating branches"));
     await createStaffRoles().then(_ => console.log("done creating staff roles"));
     await createUsers().then(_ => console.log("done creating users"));
+
+    await createAccountTypes().then(_ => console.log("done creating account types"));
+    await createAccounts().then(_ => console.log("done creating accounts"));
 }
 
 main()
