@@ -1,5 +1,5 @@
 const random = require('random-name');
-const crypto = require('crypto');
+const {createHash} = require('crypto');
 const {createClient} = require("./database_client");
 
 let addressIds = [];
@@ -10,6 +10,10 @@ let staffRoleIds = [];
 let singleStaffRoleIds = [];
 let staffIds = [];
 let accountTypeIds = [];
+let accounts = [];
+let chequingAccounts = [];
+let transactions = [];
+let cardTypeIds = [];
 
 async function truncateAllTables() {
     const client = await createClient();
@@ -147,17 +151,14 @@ async function createStaffRoles() {
     singleStaffRoleIds = allStaffRoleIds.slice(-4);
 }
 
-async function hashPassword(password) {
+async function hash(string) {
     const salt = process.env.SALT;
-    const msgBuffer = new TextEncoder().encode(salt + password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return createHash('sha256').update(salt + string).digest('hex');
 }
 
 async function createUsers() {
     const users = [];
-    const hashedPassword = await hashPassword("password");
+    const hashedPassword = await hash("password");
     addressIds.forEach(addressId => {
         const name = getRandomName();
         const user = {
@@ -280,7 +281,6 @@ async function createAccountTypes() {
 }
 
 async function createAccounts() {
-    const accounts = [];
     clientIds.forEach(clientId => {
         const clientAccounts = {
             chequing: Math.floor(Math.random() * 3),
@@ -300,7 +300,9 @@ async function createAccounts() {
                 else if (accountType === "gic") accountTypeId = accountTypeIds[4];
 
                 const account = {
-                    account_type_id: accountTypeId,
+                    id: null,
+                    type: accountType,
+                    type_id: accountTypeId,
                     client_id: clientId,
                     balance: Math.random() * 1_000_000 + 100,
                     status: "active",
@@ -315,10 +317,10 @@ async function createAccounts() {
     await client.connect();
     const res = await client.query(
         `INSERT INTO wob.account(account_type_id, client_id, balance, status, branch_id)
-         SELECT account_type_id, client_id, balance, status, branch_id
+         SELECT type_id, client_id, balance, status, branch_id
          FROM jsonb_to_recordset($1::jsonb)
              AS t (
-                account_type_id uuid
+                type_id uuid
                 , client_id uuid
                 , balance money
                 , status text
@@ -326,6 +328,169 @@ async function createAccounts() {
              )
          RETURNING account_id;`,
         [JSON.stringify(accounts)]
+    );
+    await client.end();
+
+    const accountIds = res.rows.map(row => row.account_id);
+    accounts.forEach(function (account, i) {
+        account.id = accountIds[i];
+    });
+}
+
+async function createTransactions() {
+    const statuses = [
+        "pending",
+        "cancelled",
+        "declined",
+        "submitted",
+        "paid",
+        "failed"
+    ];
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    chequingAccounts.forEach(account => {
+        const numTransactions = Math.floor(Math.random() * 100) + 1;
+        for (let i = 0; i < numTransactions; i++) {
+            const transaction = {
+                id: null,
+                amount: Math.random() * 1_000 + 1,
+                datetime: new Date(Math.floor(Math.random() * 50) + 1975, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28), Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60)),
+                status: statuses[Math.floor(Math.random() * statuses.length)],
+                account_id: account.id,
+                merchant_name: characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)]
+            };
+
+            transactions.push(transaction);
+        }
+    });
+
+    // Need to split the transactions into chunks of 1,000,000
+    // due to database limitations for string length
+    const transactionsSplit = [];
+    for (let i = 0; i < transactions.length; i += 1_000_000) {
+        transactionsSplit.push(transactions.slice(i, i + 1_000_000));
+    }
+    for (const transactions of transactionsSplit) {
+        const client = await createClient();
+        await client.connect();
+        const res = await client.query(
+            `INSERT INTO wob.transaction(amount, datetime, status, account_id, merchant_name)
+             SELECT amount, datetime, status, account_id, merchant_name
+             FROM jsonb_to_recordset($1::jsonb)
+                 AS t (
+                    amount money
+                    , datetime timestamp
+                    , status text
+                    , account_id uuid
+                    , merchant_name text
+                 )
+             RETURNING transaction_id;`,
+            [JSON.stringify(transactions)]
+        );
+        await client.end();
+
+        const transactionIds = res.rows.map(row => row.transaction_id);
+        transactions.forEach(function (transaction, i) {
+            transaction.id = transactionIds[i];
+        });
+    }
+}
+
+async function createCardTypes() {
+    const cardTypes = [
+        {name: "Debit", interest_rate: 0.0, interest_type: "simple"},
+        {name: "Credit", interest_rate: 0.1999, interest_type: "simple"}
+    ];
+
+    const client = await createClient();
+    await client.connect();
+    for (const cardType of cardTypes) {
+        let res = await client.query(
+            `INSERT INTO wob.interest(interest_rate, interest_type)
+             VALUES ($1, $2)
+             RETURNING interest_id;`,
+            [cardType.interest_rate, cardType.interest_type]
+        );
+        const interestId = res.rows[0].interest_id;
+
+        res = await client.query(
+            `INSERT INTO wob.card_type(name, interest_id)
+             VALUES ($1, $2)
+             RETURNING card_type_id;`,
+            [cardType.name, interestId]
+        );
+        cardTypeIds.push(res.rows[0].card_type_id);
+    }
+    await client.end();
+}
+
+async function createCards() {
+    const clientCards = [];
+
+    const accountsMap = new Map();
+    for (const account of chequingAccounts) {
+        if (!accountsMap.has(account.client_id))
+            accountsMap.set(account.client_id, []);
+        accountsMap.get(account.client_id).push(account);
+    }
+
+    for (const clientId of clientIds) {
+        const clientAccounts = accountsMap.get(clientId);
+        if (!clientAccounts) continue;
+        if (clientAccounts.length > 0) {
+            const firstAccount = clientAccounts[0];
+
+            const card = {
+                type: "Debit",
+                type_id: cardTypeIds[0],
+                expiry_date: new Date(Math.floor(Math.random() * 10) + 2030, Math.floor(Math.random() * 12), 1),
+                card_number: Math.floor(Math.random() * 9999999999999999).toString().padStart(16, '0'),
+                pin: await hash(Math.floor(Math.random() * 9999).toString().padStart(4, '0')),
+                verification_value: await hash(Math.floor(Math.random() * 999).toString().padStart(3, '0')),
+                status: "active",
+                account_id: firstAccount.id,
+                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100
+            }
+
+            clientCards.push(card);
+        }
+
+        if (clientAccounts.length > 1) {
+            const firstAccount = clientAccounts[1];
+
+            const card = {
+                type: "Credit",
+                type_id: cardTypeIds[1],
+                expiry_date: new Date(Math.floor(Math.random() * 10) + 2030, Math.floor(Math.random() * 12), 1),
+                card_number: Math.floor(Math.random() * 9999999999999999).toString().padStart(16, '0'),
+                pin: await hash(Math.floor(Math.random() * 9999).toString().padStart(4, '0')),
+                verification_value: await hash(Math.floor(Math.random() * 999).toString().padStart(3, '0')),
+                status: "active",
+                account_id: firstAccount.id,
+                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100
+            }
+
+            clientCards.push(card);
+        }
+    }
+
+    const client = await createClient();
+    await client.connect();
+    await client.query(
+        `INSERT INTO wob.bank_card(card_type_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit)
+         SELECT type_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                type_id uuid
+                , expiry_date date
+                , card_number text
+                , pin text
+                , verification_value text
+                , status text
+                , account_id uuid
+                , daily_limit money
+             )
+         RETURNING bank_card_id;`,
+        [JSON.stringify(clientCards)]
     );
     await client.end();
 }
@@ -340,6 +505,10 @@ async function main() {
 
     await createAccountTypes().then(_ => console.log("done creating account types"));
     await createAccounts().then(_ => console.log("done creating accounts"));
+    await createTransactions().then(_ => console.log("done creating transactions"));
+
+    await createCardTypes().then(_ => console.log("done creating card types"));
+    await createCards().then(_ => console.log("done creating cards"));
 }
 
 main()
