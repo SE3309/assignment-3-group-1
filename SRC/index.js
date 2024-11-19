@@ -309,7 +309,6 @@ async function createAccounts() {
                     branch_id: branchIds[Math.floor(Math.random() * branchIds.length)]
                 }
                 accounts.push(account);
-                if (accountType === "chequing") chequingAccounts.push(account);
             }
         }
     });
