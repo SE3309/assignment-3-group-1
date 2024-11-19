@@ -11,6 +11,7 @@ let singleStaffRoleIds = [];
 let staffIds = [];
 let accountTypeIds = [];
 let accounts = [];
+let chequingAccounts = [];
 let transactions = [];
 let cardTypeIds = [];
 
@@ -308,6 +309,7 @@ async function createAccounts() {
                     branch_id: branchIds[Math.floor(Math.random() * branchIds.length)]
                 }
                 accounts.push(account);
+                if (accountType === "chequing") chequingAccounts.push(account);
             }
         }
     });
@@ -346,7 +348,7 @@ async function createTransactions() {
         "failed"
     ];
     const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    accounts.filter(account => account.type === "chequing").forEach(account => {
+    chequingAccounts.forEach(account => {
         const numTransactions = Math.floor(Math.random() * 100) + 1;
         for (let i = 0; i < numTransactions; i++) {
             const transaction = {
@@ -424,11 +426,17 @@ async function createCardTypes() {
 
 async function createCards() {
     const clientCards = [];
-    const chequingAccounts = accounts.filter(account => account.type === "chequing");
+
+    const accountsMap = new Map();
+    for (const account of chequingAccounts) {
+        if (!accountsMap.has(account.client_id))
+            accountsMap.set(account.client_id, []);
+        accountsMap.get(account.client_id).push(account);
+    }
+
     for (const clientId of clientIds) {
-        const i = clientIds.indexOf(clientId);
-        if (i % 10_000 === 0) console.log(i);
-        const clientAccounts = chequingAccounts.filter(account => account.client_id === clientId);
+        const clientAccounts = accountsMap.get(clientId);
+        if (!clientAccounts) continue;
         if (clientAccounts.length > 0) {
             const firstAccount = clientAccounts[0];
 
@@ -465,7 +473,6 @@ async function createCards() {
             clientCards.push(card);
         }
     }
-    console.log(clientIds.length);
 
     const client = await createClient();
     await client.connect();
