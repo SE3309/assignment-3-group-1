@@ -425,10 +425,17 @@ async function createCardTypes() {
 async function createCards() {
     const clientCards = [];
     const chequingAccounts = accounts.filter(account => account.type === "chequing");
+
+    const accountsMap = new Map();
+    for (const account of chequingAccounts) {
+        if (!accountsMap.has(account.client_id))
+            accountsMap.set(account.client_id, []);
+        accountsMap.get(account.client_id).push(account);
+    }
+
     for (const clientId of clientIds) {
-        const i = clientIds.indexOf(clientId);
-        if (i % 10_000 === 0) console.log(i);
-        const clientAccounts = chequingAccounts.filter(account => account.client_id === clientId);
+        const clientAccounts = accountsMap.get(clientId);
+        if (!clientAccounts) continue;
         if (clientAccounts.length > 0) {
             const firstAccount = clientAccounts[0];
 
@@ -499,7 +506,7 @@ async function main() {
 
     await createAccountTypes().then(_ => console.log("done creating account types"));
     await createAccounts().then(_ => console.log("done creating accounts"));
-    await createTransactions().then(_ => console.log("done creating transactions"));
+    // await createTransactions().then(_ => console.log("done creating transactions"));
 
     await createCardTypes().then(_ => console.log("done creating card types"));
     await createCards().then(_ => console.log("done creating cards"));
