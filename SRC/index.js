@@ -10,6 +10,8 @@ let staffRoleIds = [];
 let singleStaffRoleIds = [];
 let staffIds = [];
 let accountTypeIds = [];
+let accounts = [];
+let transactions = [];
 
 async function truncateAllTables() {
     const client = await createClient();
@@ -280,7 +282,6 @@ async function createAccountTypes() {
 }
 
 async function createAccounts() {
-    const accounts = [];
     clientIds.forEach(clientId => {
         const clientAccounts = {
             chequing: Math.floor(Math.random() * 3),
@@ -300,7 +301,9 @@ async function createAccounts() {
                 else if (accountType === "gic") accountTypeId = accountTypeIds[4];
 
                 const account = {
-                    account_type_id: accountTypeId,
+                    id: null,
+                    type: accountType,
+                    type_id: accountTypeId,
                     client_id: clientId,
                     balance: Math.random() * 1_000_000 + 100,
                     status: "active",
@@ -315,10 +318,10 @@ async function createAccounts() {
     await client.connect();
     const res = await client.query(
         `INSERT INTO wob.account(account_type_id, client_id, balance, status, branch_id)
-         SELECT account_type_id, client_id, balance, status, branch_id
+         SELECT type_id, client_id, balance, status, branch_id
          FROM jsonb_to_recordset($1::jsonb)
              AS t (
-                account_type_id uuid
+                type_id uuid
                 , client_id uuid
                 , balance money
                 , status text
@@ -328,6 +331,69 @@ async function createAccounts() {
         [JSON.stringify(accounts)]
     );
     await client.end();
+
+    const accountIds = res.rows.map(row => row.account_id);
+    accounts.forEach(function (account, i) {
+        account.id = accountIds[i];
+    });
+}
+
+async function createTransactions() {
+    const statuses = [
+        "pending",
+        "cancelled",
+        "declined",
+        "submitted",
+        "paid",
+        "failed"
+    ];
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    accounts.filter(account => account.type === "chequing").forEach(account => {
+        const numTransactions = Math.floor(Math.random() * 100) + 1;
+        for (let i = 0; i < numTransactions; i++) {
+            const transaction = {
+                id: null,
+                amount: Math.random() * 1_000 + 1,
+                datetime: new Date(Math.floor(Math.random() * 50) + 1975, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28), Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60)),
+                status: statuses[Math.floor(Math.random() * statuses.length)],
+                account_id: account.id,
+                merchant_name: characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)]
+            };
+
+            transactions.push(transaction);
+        }
+    });
+
+    // Need to split the transactions into chunks of 100,000
+    // due to database limitations for string length
+    const transactionsSplit = [];
+    for (let i = 0; i < transactions.length; i += 100_000) {
+        transactionsSplit.push(transactions.slice(i, i + 100_000));
+    }
+    for (const transactions of transactionsSplit) {
+        const client = await createClient();
+        await client.connect();
+        const res = await client.query(
+            `INSERT INTO wob.transaction(amount, datetime, status, account_id, merchant_name)
+             SELECT amount, datetime, status, account_id, merchant_name
+             FROM jsonb_to_recordset($1::jsonb)
+                 AS t (
+                    amount money
+                    , datetime timestamp
+                    , status text
+                    , account_id uuid
+                    , merchant_name text
+                 )
+             RETURNING transaction_id;`,
+            [JSON.stringify(transactions)]
+        );
+        await client.end();
+
+        const transactionIds = res.rows.map(row => row.transaction_id);
+        transactions.forEach(function (transaction, i) {
+            transaction.id = transactionIds[i];
+        });
+    }
 }
 
 async function main() {
@@ -340,6 +406,7 @@ async function main() {
 
     await createAccountTypes().then(_ => console.log("done creating account types"));
     await createAccounts().then(_ => console.log("done creating accounts"));
+    await createTransactions().then(_ => console.log("done creating transactions"));
 }
 
 main()
