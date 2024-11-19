@@ -364,11 +364,11 @@ async function createTransactions() {
         }
     });
 
-    // Need to split the transactions into chunks of 100,000
+    // Need to split the transactions into chunks of 1,000,000
     // due to database limitations for string length
     const transactionsSplit = [];
-    for (let i = 0; i < transactions.length; i += 100_000) {
-        transactionsSplit.push(transactions.slice(i, i + 100_000));
+    for (let i = 0; i < transactions.length; i += 1_000_000) {
+        transactionsSplit.push(transactions.slice(i, i + 1_000_000));
     }
     for (const transactions of transactionsSplit) {
         const client = await createClient();
