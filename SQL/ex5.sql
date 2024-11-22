@@ -29,3 +29,48 @@ JOIN wob.branch ON wob.branch.branch_id = wob.staff.branch_id
 JOIN wob.address ON wob.address.address_id = wob.branch.address_id
 WHERE "user".name = 'Candice Dolf';
 
+-- Get all users with their total balance, ordered by total balance from highest to lowest
+SELECT "user".user_id, "user".name, "user".phone_number, "user".email,
+       client.status AS client_status,
+       SUM(account.balance) AS total_balance
+FROM wob."user"
+JOIN wob.client ON wob.client.user_id = wob."user".user_id
+JOIN wob.account ON wob.account.client_id = wob.client.client_id
+GROUP BY wob."user".user_id, client.status
+ORDER BY total_balance DESC;
+
+-- Get the average bank account balance for each account type
+SELECT AVG(account.balance::numeric)::money AS average_bank_account_balance,
+       account_type.name AS account_type
+FROM wob."user"
+JOIN wob.client ON wob.client.user_id = wob."user".user_id
+JOIN wob.account ON wob.account.client_id = wob.client.client_id
+JOIN wob.account_type ON wob.account_type.account_type_id = wob.account.account_type_id
+GROUP BY account_type;
+
+-- Get the total amount of money spent on transactions for each month
+SELECT to_char(date_trunc('month', datetime), 'YYYY-MM') AS year_month, SUM(amount)
+FROM wob.transaction
+WHERE status <> 'failed'
+GROUP BY year_month
+ORDER BY year_month DESC;
+
+-- Get the total account balance for each forward sortation area
+SELECT SUBSTRING(postal_code, 0, 4) AS forward_sortation_area,
+       SUM(balance) AS total_account_balance
+FROM wob.address
+JOIN wob."user" ON wob.address.address_id = wob."user".address_id
+JOIN wob.client ON wob."user".user_id = wob.client.user_id
+JOIN wob.account ON wob.client.client_id = wob.account.client_id
+GROUP BY forward_sortation_area
+ORDER BY total_account_balance DESC;
+
+-- Get the count of users with the same family name
+SELECT COUNT(*) AS family_name_count, arr[array_length(arr, 1)] AS family_name
+FROM (
+    SELECT string_to_array(name, ' ') AS arr
+    FROM wob."user"
+) AS sub
+GROUP BY family_name
+ORDER BY family_name_count DESC
+LIMIT 12;
