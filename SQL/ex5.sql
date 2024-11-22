@@ -64,3 +64,13 @@ JOIN wob.client ON wob."user".user_id = wob.client.user_id
 JOIN wob.account ON wob.client.client_id = wob.account.client_id
 GROUP BY forward_sortation_area
 ORDER BY total_account_balance DESC;
+
+-- Get the count of users with the same family name
+SELECT COUNT(*) AS family_name_count, arr[array_length(arr, 1)] AS family_name
+FROM (
+    SELECT string_to_array(name, ' ') AS arr
+    FROM wob."user"
+) AS sub
+GROUP BY family_name
+ORDER BY family_name_count DESC
+LIMIT 12;
