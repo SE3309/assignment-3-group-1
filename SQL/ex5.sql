@@ -29,3 +29,13 @@ JOIN wob.branch ON wob.branch.branch_id = wob.staff.branch_id
 JOIN wob.address ON wob.address.address_id = wob.branch.address_id
 WHERE "user".name = 'Candice Dolf';
 
+-- Get all users with their total balance, ordered by total balance from highest to lowest
+SELECT "user".user_id, "user".name, "user".phone_number, "user".email,
+       client.status AS client_status,
+       SUM(account.balance) AS total_balance
+FROM wob."user"
+JOIN wob.client ON wob.client.user_id = wob."user".user_id
+JOIN wob.account ON wob.account.client_id = wob.client.client_id
+GROUP BY wob."user".user_id, client.status
+ORDER BY total_balance DESC;
+
