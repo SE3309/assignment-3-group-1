@@ -47,3 +47,20 @@ JOIN wob.client ON wob.client.user_id = wob."user".user_id
 JOIN wob.account ON wob.account.client_id = wob.client.client_id
 JOIN wob.account_type ON wob.account_type.account_type_id = wob.account.account_type_id
 GROUP BY account_type;
+
+-- Get the total amount of money spent on transactions for each month
+SELECT to_char(date_trunc('month', datetime), 'YYYY-MM') AS year_month, SUM(amount)
+FROM wob.transaction
+WHERE status <> 'failed'
+GROUP BY year_month
+ORDER BY year_month DESC;
+
+-- Get the total account balance for each forward sortation area
+SELECT SUBSTRING(postal_code, 0, 4) AS forward_sortation_area,
+       SUM(balance) AS total_account_balance
+FROM wob.address
+JOIN wob."user" ON wob.address.address_id = wob."user".address_id
+JOIN wob.client ON wob."user".user_id = wob.client.user_id
+JOIN wob.account ON wob.client.client_id = wob.account.client_id
+GROUP BY forward_sortation_area
+ORDER BY total_account_balance DESC;
