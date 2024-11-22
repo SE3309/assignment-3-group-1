@@ -4,7 +4,7 @@ const {createClient} = require("./database_client");
 
 let addressIds = [];
 let branchIds = [];
-let userIds = [];
+let users = [];
 let clientIds = [];
 let staffRoleIds = [];
 let singleStaffRoleIds = [];
@@ -14,6 +14,7 @@ let accounts = [];
 let chequingAccounts = [];
 let transactions = [];
 let cardTypeIds = [];
+let bankCards = [];
 
 async function truncateAllTables() {
     const client = await createClient();
@@ -157,15 +158,14 @@ async function hash(string) {
 }
 
 async function createUsers() {
-    const users = [];
     const hashedPassword = await hash("password");
     addressIds.forEach(addressId => {
         const name = getRandomName();
         const user = {
             name: name,
-            phone_number: `+1 (${Math.floor(Math.random() * 999)}) ${Math.floor(Math.random() * 999)}-${Math.floor(Math.random() * 9999)}`,
+            phone_number: `+1 (${Math.floor(Math.random() * 900) + 100}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`,
             email: (name.split(' ').join('.') + "@gmail.com").toLowerCase(),
-            date_of_birth: new Date(1950 + Math.floor(Math.random() * 56), Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
+            date_of_birth: new Date(1959 + Math.floor(Math.random() * 56), Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
             password: hashedPassword,
             address_id: addressId,
             type: Math.random() >= 0.987654320 ? "staff" : "client"
@@ -198,8 +198,8 @@ async function createUsers() {
 
     const clients = users.filter(user => user.type === "client");
     clients.forEach(client => {
-        client.student_number = 251_000_000 + Math.floor(Math.random() * 999_999);
-        client.status = Math.random() >= 0.3 ? "active" : "inactive";
+        client.student_number = 251_000_000 + Math.floor(Math.random() * 1_000_000);
+        client.status = Math.random() >= 0.25 ? "active" : "inactive";
     })
 
     client = await createClient();
@@ -280,35 +280,45 @@ async function createAccountTypes() {
     await client.end();
 }
 
+function compoundInterest(principal, rate, time, timesPerPeriod = 12) {
+    return principal * Math.pow(1 + rate / timesPerPeriod, timesPerPeriod * time);
+}
+
 async function createAccounts() {
-    clientIds.forEach(clientId => {
+    users.filter(user => user.type === "client").forEach((client, i) => {
         const clientAccounts = {
-            chequing: Math.floor(Math.random() * 3),
+            chequing: Math.floor(Math.random() * 2) + 1,
             savings: Math.floor(Math.random() * 4),
             tfsa: Math.random() >= 0.5 ? 1 : 0,
             rrsp: Math.random() >= 0.5 ? 1 : 0,
             gic: Math.random() >= 0.5 ? 1 : 0
         };
 
+        const today = new Date();
+        today.setFullYear(today.getFullYear() - 10);
+        const diffTime = Math.abs(today - client.date_of_birth);
+        const years = diffTime / (1000 * 60 * 60 * 24 * 30 * 12);
         for (const [accountType, count] of Object.entries(clientAccounts)) {
-            for (let i = 0; i < count; i++) {
+            for (let j = 0; j < count; j++) {
                 let accountTypeId;
-                if (accountType === "chequing") accountTypeId = accountTypeIds[0];
-                else if (accountType === "savings") accountTypeId = accountTypeIds[1];
-                else if (accountType === "tfsa") accountTypeId = accountTypeIds[2];
-                else if (accountType === "rrsp") accountTypeId = accountTypeIds[3];
-                else if (accountType === "gic") accountTypeId = accountTypeIds[4];
+                let balance;
+                if (accountType === "chequing") {accountTypeId = accountTypeIds[0]; balance = Math.random() * 10_000;}
+                else if (accountType === "savings") {accountTypeId = accountTypeIds[1]; balance = Math.random() * 100_000;}
+                else if (accountType === "tfsa") {accountTypeId = accountTypeIds[2]; balance = compoundInterest(Math.random() * 50_000, .0725, years);}
+                else if (accountType === "rrsp") {accountTypeId = accountTypeIds[3]; balance = compoundInterest(Math.random() * 10_000, .0800, years);}
+                else if (accountType === "gic") {accountTypeId = accountTypeIds[4]; balance = compoundInterest(Math.random() * 100_000, .0150, years);}
 
                 const account = {
                     id: null,
                     type: accountType,
                     type_id: accountTypeId,
-                    client_id: clientId,
-                    balance: Math.random() * 1_000_000 + 100,
+                    client_id: clientIds[i],
+                    balance: balance,
                     status: "active",
                     branch_id: branchIds[Math.floor(Math.random() * branchIds.length)]
                 }
                 accounts.push(account);
+                if (accountType === "chequing") chequingAccounts.push(account);
             }
         }
     });
@@ -424,8 +434,6 @@ async function createCardTypes() {
 }
 
 async function createCards() {
-    const clientCards = [];
-
     const accountsMap = new Map();
     for (const account of chequingAccounts) {
         if (!accountsMap.has(account.client_id))
@@ -448,16 +456,18 @@ async function createCards() {
                 verification_value: await hash(Math.floor(Math.random() * 999).toString().padStart(3, '0')),
                 status: "active",
                 account_id: firstAccount.id,
-                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100
+                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100,
+                client_id: clientId
             }
 
-            clientCards.push(card);
+            bankCards.push(card);
         }
 
         if (clientAccounts.length > 1) {
             const firstAccount = clientAccounts[1];
 
             const card = {
+                id: null,
                 type: "Credit",
                 type_id: cardTypeIds[1],
                 expiry_date: new Date(Math.floor(Math.random() * 10) + 2030, Math.floor(Math.random() * 12), 1),
@@ -466,16 +476,17 @@ async function createCards() {
                 verification_value: await hash(Math.floor(Math.random() * 999).toString().padStart(3, '0')),
                 status: "active",
                 account_id: firstAccount.id,
-                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100
+                daily_limit: Math.random() >= 0.5 ? null : (Math.floor(Math.random() * 98) + 2) * 100,
+                client_id: clientId
             }
 
-            clientCards.push(card);
+            bankCards.push(card);
         }
     }
 
     const client = await createClient();
     await client.connect();
-    await client.query(
+    const res = await client.query(
         `INSERT INTO wob.bank_card(card_type_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit)
          SELECT type_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit
          FROM jsonb_to_recordset($1::jsonb)
@@ -490,9 +501,69 @@ async function createCards() {
                 , daily_limit money
              )
          RETURNING bank_card_id;`,
-        [JSON.stringify(clientCards)]
+        [JSON.stringify(bankCards)]
     );
     await client.end();
+
+    const cardIds = res.rows.map(row => row.bank_card_id);
+    bankCards.forEach(function (card, i) {
+        card.id = cardIds[i];
+    });
+}
+
+async function createCardApplications() {
+    const applications = [];
+    bankCards.forEach(card => {
+        const application = {
+            id: null,
+            submission_date: new Date(Math.floor(Math.random() * 10) + 2020, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
+            status: "approved",
+            client_id: card.client_id,
+            card_type_id: card.type_id,
+            staff_id: staffIds[Math.floor(Math.random() * staffIds.length)],
+            notes: "Approved"
+        }
+
+        applications.push(application);
+
+        if (Math.random() >= 0.95) {
+            const application = {
+                id: null,
+                submission_date: new Date(Math.floor(Math.random() * 10) + 2020, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
+                status: "rejected",
+                client_id: card.client_id,
+                card_type_id: card.type_id,
+                staff_id: staffIds[Math.floor(Math.random() * staffIds.length)],
+                notes: "I didn't feel like approving this one <3"
+            }
+
+            applications.push(application);
+        }
+    });
+
+    const client = await createClient();
+    await client.connect();
+    const res = await client.query(
+        `INSERT INTO wob.card_application(submission_date, status, client_id, card_type_id, staff_id, notes)
+         SELECT submission_date, status, client_id, card_type_id, staff_id, notes
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                submission_date date
+                , status text
+                , client_id uuid
+                , card_type_id uuid
+                , staff_id uuid
+                , notes text
+             )
+         RETURNING card_application_id;`,
+        [JSON.stringify(applications)]
+    );
+    await client.end();
+
+    const applicationIds = res.rows.map(row => row.card_application_id);
+    applications.forEach(function (application, i) {
+        application.id = applicationIds[i];
+    });
 }
 
 async function main() {
@@ -501,14 +572,15 @@ async function main() {
     await createAddresses(81).then(_ => console.log("done creating addresses"));
     await createBranches(1).then(_ => console.log("done creating branches"));
     await createStaffRoles().then(_ => console.log("done creating staff roles"));
-    await createUsers().then(_ => console.log("done creating users"));
+    await createUsers().then(_ => console.log("done creating users, clients and staff"));
 
     await createAccountTypes().then(_ => console.log("done creating account types"));
     await createAccounts().then(_ => console.log("done creating accounts"));
-    await createTransactions().then(_ => console.log("done creating transactions"));
+    // await createTransactions().then(_ => console.log("done creating transactions"));
 
     await createCardTypes().then(_ => console.log("done creating card types"));
     await createCards().then(_ => console.log("done creating cards"));
+    await createCardApplications().then(_ => console.log("done creating card applications"));
 }
 
 main()
