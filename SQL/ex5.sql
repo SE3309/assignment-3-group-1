@@ -39,3 +39,11 @@ JOIN wob.account ON wob.account.client_id = wob.client.client_id
 GROUP BY wob."user".user_id, client.status
 ORDER BY total_balance DESC;
 
+-- Get the average bank account balance for each account type
+SELECT AVG(account.balance::numeric)::money AS average_bank_account_balance,
+       account_type.name AS account_type
+FROM wob."user"
+JOIN wob.client ON wob.client.user_id = wob."user".user_id
+JOIN wob.account ON wob.account.client_id = wob.client.client_id
+JOIN wob.account_type ON wob.account_type.account_type_id = wob.account.account_type_id
+GROUP BY account_type;
