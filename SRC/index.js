@@ -39,22 +39,23 @@ async function getRandomAddresses(count) {
     return await res.json();
 }
 
+function addressToObj(address) {
+    const split = address.split(', ');
+    return {
+        street_number: split[0].split(' ')[0].trim(),
+        street_name: split[0].split(' ').slice(1).join(' ').trim(),
+        postal_code: split[2].split(' ').join('').trim(),
+        city: split[3].trim(),
+        province: split[4].trim(),
+        country: split[5].trim()
+    };
+}
+
 async function createAddresses(countInThousands) {
     let addressObjs = [];
     for (let i = 0; i < countInThousands; i++) {
         const addresses = await getRandomAddresses(1000);
-        for (const address of addresses) {
-            const split = address.split(",");
-            const addressObj = {
-                street_number: split[0].split(' ')[0].trim(),
-                street_name: split[0].split(' ').slice(1).join(' ').trim(),
-                postal_code: split[2].split(' ').join('').trim(),
-                city: split[3].trim(),
-                province: split[4].trim(),
-                country: split[5].trim()
-            };
-            addressObjs.push(addressObj);
-        }
+        addresses.forEach(address => addressObjs.push(addressToObj(address)));
     }
 
     const client = await createClient();
@@ -81,15 +82,7 @@ async function createAddresses(countInThousands) {
 async function createBranches(count) {
     for (let i = 0; i < count; i++) {
         const address = (await getRandomAddresses(1))[0];
-        const split = address.split(', ');
-        const addressObj = {
-            street_number: split[0].split(' ')[0].trim(),
-            street_name: split[0].split(' ').slice(1).join(' ').trim(),
-            postal_code: split[2].split(' ').join('').trim(),
-            city: split[3].trim(),
-            province: split[4].trim(),
-            country: split[5].trim()
-        };
+        const addressObj = addressToObj(address);
         const client = await createClient();
         await client.connect();
         let res = await client.query(
@@ -700,6 +693,102 @@ async function createLoanApplications() {
         application.id = applicationIds[i];
     });
 }
+
+async function createAudits() {
+    const audits = [];
+    accounts.forEach(account => {
+        if (Math.random() >= 0.999) {
+            const audit = {
+                audit_date: new Date(Math.floor(Math.random() * 10) + 2020, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
+                notes: "Account balance was too high",
+                account_id: account.id,
+                staff_id: staffIds[Math.floor(Math.random() * staffIds.length)]
+            }
+
+            audits.push(audit);
+        }
+    });
+
+    const client = await createClient();
+    await client.connect();
+    await client.query(
+        `INSERT INTO wob.audit(audit_date, notes, account_id, staff_id)
+         SELECT audit_date, notes, account_id, staff_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                audit_date date
+                , notes text
+                , account_id uuid
+                , staff_id uuid
+             )
+         RETURNING audit_id;`,
+        [JSON.stringify(audits)]
+    );
+    await client.end();
+}
+
+async function createStatements() {
+    const statements = [];
+    accounts.forEach(account => {
+        const statement = {
+            account_id: account.id,
+            closing_balance: account.balance,
+            end_date: new Date()
+        }
+
+        statements.push(statement);
+    });
+
+    const client = await createClient();
+    await client.connect();
+    await client.query(
+        `INSERT INTO wob.statement(account_id, closing_balance, end_date)
+         SELECT account_id, closing_balance, end_date
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                account_id uuid
+                , closing_balance money
+                , end_date date
+             )
+         RETURNING statement_id;`,
+        [JSON.stringify(statements)]
+    );
+    await client.end();
+}
+
+async function createNotifications() {
+    const notifications = [];
+    clientIds.forEach(clientId => {
+        const numNotifications = Math.floor(Math.random() * 10) + 1;
+
+        for (let i = 0; i < numNotifications; i++) {
+            const notification = {
+                message: "You have a new notification!",
+                datetime: new Date(Math.floor(Math.random() * 10) + 2020, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28)),
+                client_id: clientId,
+            }
+
+            notifications.push(notification);
+        }
+    });
+
+    const client = await createClient();
+    await client.connect();
+    await client.query(
+        `INSERT INTO wob.notification(message, datetime, client_id)
+         SELECT message, datetime, client_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                message text
+                , datetime timestamp
+                , client_id uuid
+             )
+         RETURNING notification_id;`,
+        [JSON.stringify(notifications)]
+    );
+    await client.end();
+}
+
 async function main() {
     await truncateAllTables().then(_ => console.log("done truncating tables"));
 
@@ -718,6 +807,10 @@ async function main() {
 
     await createLoans().then(_ => console.log("done creating loans"));
     await createLoanApplications().then(_ => console.log("done creating loan applications"));
+
+    await createAudits().then(_ => console.log("done creating audits"));
+    await createStatements().then(_ => console.log("done creating statements"));
+    await createNotifications().then(_ => console.log("done creating notifications"));
 }
 
 main()
