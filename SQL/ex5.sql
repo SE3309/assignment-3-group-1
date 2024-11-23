@@ -17,17 +17,24 @@ LEFT JOIN wob.card_type ON wob.card_type.card_type_id = wob.bank_card.card_type_
 LEFT JOIN wob.interest ON wob.interest.interest_id = wob.card_type.interest_id
 WHERE "user".name = 'Annamaria Hercule Fredenburg';
 
--- Get staff member, with their role, branch and the branch's address
-SELECT "user".name, "user".phone_number, "user".email, "user".date_of_birth,
-       staff.status AS staff_status,
-       staff_role.name AS staff_role_name, staff_role.base_salary,
-       address.street_number AS branch_street_number, address.street_name AS branch_street_name, address.city AS branch_city, address.province AS branch_province, address.country AS branch_country, address.postal_code AS branch_postal_code
-FROM wob."user"
-JOIN wob.staff ON wob.staff.user_id = wob."user".user_id
-JOIN wob.staff_role ON wob.staff_role.staff_role_id = wob.staff.staff_role_id
-JOIN wob.branch ON wob.branch.branch_id = wob.staff.branch_id
-JOIN wob.address ON wob.address.address_id = wob.branch.address_id
-WHERE "user".name = 'Candice Dolf';
+---Retrieve the total balance for each client who has at least one active account and has made at least one transaction with an amount greater than $500
+SELECT 
+    c.client_id,
+    c.user_id,
+    SUM(a.balance)::money AS total_balance, -- Total balance for active accounts
+    COUNT(t.transaction_id) AS high_value_transactions -- Count of transactions > $500
+FROM wob.client c
+JOIN wob.account a ON c.client_id = a.client_id
+LEFT JOIN wob.transaction t ON a.account_id = t.account_id
+WHERE a.status = 'active'
+  AND EXISTS (
+      SELECT 1 
+      FROM wob.transaction sub_t
+      WHERE sub_t.account_id = a.account_id 
+        AND sub_t.amount::numeric > 500.00 -- At least one transaction > $500
+  )
+GROUP BY c.client_id, c.user_id
+ORDER BY total_balance DESC; -- Order by total balance
 
 -- Get all users with their total balance, ordered by total balance from highest to lowest
 SELECT "user".user_id, "user".name, "user".phone_number, "user".email,
