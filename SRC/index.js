@@ -2,6 +2,8 @@ const random = require('random-name');
 const {createHash} = require('crypto');
 const {createClient} = require("./database_client");
 
+// Global variables
+const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 let addressIds = [];
 let branchIds = [];
 let users = [];
@@ -17,6 +19,7 @@ let cardTypeIds = [];
 let bankCards = [];
 let loans = [];
 
+// Helper functions
 async function truncateAllTables() {
     const client = await createClient();
     await client.connect();
@@ -39,6 +42,11 @@ async function getRandomAddresses(count) {
     return await res.json();
 }
 
+async function hash(string) {
+    const salt = process.env.SALT;
+    return createHash('sha256').update(salt + string).digest('hex');
+}
+
 function addressToObj(address) {
     const split = address.split(', ');
     return {
@@ -51,6 +59,19 @@ function addressToObj(address) {
     };
 }
 
+function compoundInterest(principal, rate, time, timesPerPeriod = 12) {
+    return principal * Math.pow(1 + rate / timesPerPeriod, timesPerPeriod * time);
+}
+
+function generateMerchantName() {
+    let name = "";
+    for (let i = 0; i < 5; i++) {
+        name += characters[Math.floor(Math.random() * characters.length)];
+    }
+    return name;
+}
+
+// Function to create dummy address data
 async function createAddresses(countInThousands) {
     let addressObjs = [];
     for (let i = 0; i < countInThousands; i++) {
@@ -79,6 +100,7 @@ async function createAddresses(countInThousands) {
     addressIds = res.rows.map(row => row.address_id);
 }
 
+// Function to create dummy branch data
 async function createBranches(count) {
     for (let i = 0; i < count; i++) {
         const address = (await getRandomAddresses(1))[0];
@@ -105,6 +127,7 @@ async function createBranches(count) {
     }
 }
 
+// Function to create dummy staff role data
 async function createStaffRoles() {
     const roles = [
         {name: "Bank Teller", base_salary: 35_000},
@@ -146,11 +169,7 @@ async function createStaffRoles() {
     singleStaffRoleIds = allStaffRoleIds.slice(-4);
 }
 
-async function hash(string) {
-    const salt = process.env.SALT;
-    return createHash('sha256').update(salt + string).digest('hex');
-}
-
+// Function to create dummy user data
 async function createUsers() {
     const hashedPassword = await hash("password");
     addressIds.forEach(addressId => {
@@ -243,6 +262,7 @@ async function createUsers() {
     staffIds = res.rows.map(row => row.staff_id);
 }
 
+// Function to create dummy account type and account data
 async function createAccountTypes() {
     const accountTypes = [
         {name: "Chequing", interest_rate: 0.0065, interest_type: "simple"},
@@ -274,10 +294,7 @@ async function createAccountTypes() {
     await client.end();
 }
 
-function compoundInterest(principal, rate, time, timesPerPeriod = 12) {
-    return principal * Math.pow(1 + rate / timesPerPeriod, timesPerPeriod * time);
-}
-
+// Function to create dummy account data
 async function createAccounts() {
     users.filter(user => user.type === "client").forEach((client, i) => {
         const clientAccounts = {
@@ -341,15 +358,7 @@ async function createAccounts() {
     });
 }
 
-const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-function generateMerchantName() {
-    let name = "";
-    for (let i = 0; i < 5; i++) {
-        name += characters[Math.floor(Math.random() * characters.length)];
-    }
-    return name;
-}
-
+// Function to create dummy transaction data
 async function createTransactions() {
     const statuses = [
         "pending",
@@ -410,6 +419,7 @@ async function createTransactions() {
     await client.end();
 }
 
+// Function to create dummy card type and card data
 async function createCardTypes() {
     const cardTypes = [
         {name: "Debit", interest_rate: 0.0, interest_type: "simple"},
@@ -438,6 +448,7 @@ async function createCardTypes() {
     await client.end();
 }
 
+// Function to create dummy card data
 async function createCards() {
     const accountsMap = new Map();
     for (const account of chequingAccounts) {
@@ -516,6 +527,7 @@ async function createCards() {
     });
 }
 
+// Function to create dummy loan data
 async function createCardApplications() {
     const applications = [];
     bankCards.forEach(card => {
@@ -571,6 +583,7 @@ async function createCardApplications() {
     });
 }
 
+// Function to create dummy loan data
 async function createLoans() {
     const statues = [
         "performing",
@@ -636,6 +649,7 @@ async function createLoans() {
     });
 }
 
+// Function to create dummy loan application data
 async function createLoanApplications() {
     const applications = [];
     loans.forEach(loan => {
@@ -694,6 +708,7 @@ async function createLoanApplications() {
     });
 }
 
+// Function to create dummy audit data
 async function createAudits() {
     const audits = [];
     accounts.forEach(account => {
@@ -727,6 +742,7 @@ async function createAudits() {
     await client.end();
 }
 
+// Function to create dummy statement data
 async function createStatements() {
     const statements = [];
     accounts.forEach(account => {
@@ -756,6 +772,7 @@ async function createStatements() {
     await client.end();
 }
 
+// Function to create dummy notification data
 async function createNotifications() {
     const notifications = [];
     clientIds.forEach(clientId => {
@@ -789,6 +806,7 @@ async function createNotifications() {
     await client.end();
 }
 
+// Main function to run all the functions
 async function main() {
     await truncateAllTables().then(_ => console.log("done truncating tables"));
 
@@ -813,6 +831,7 @@ async function main() {
     await createNotifications().then(_ => console.log("done creating notifications"));
 }
 
+// Run the main function
 main()
     .then(_ => console.log("done"))
     .catch(e => console.error(e));
