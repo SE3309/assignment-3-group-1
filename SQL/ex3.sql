@@ -1,25 +1,40 @@
 -- INSERT STATEMENTS
 
--- Create a new savings account for user with id `00001488-d55e-43c9-94a9-5c4b1b7ea2b0`
-INSERT INTO wob.account(client_id, status, branch_id, account_type_id)
-VALUES (
-           '00001488-d55e-43c9-94a9-5c4b1b7ea2b0',
-           'active',
-           (SELECT branch_id FROM wob.branch LIMIT 1),
-           (SELECT account_type_id FROM wob.account_type WHERE name = 'Savings')
-       )
-RETURNING account_id;
+---Insert Transactions Based on Account Status
+INSERT INTO wob.transaction (transaction_id, amount, datetime, status, account_id, merchant_name)
+SELECT 
+    gen_random_uuid(),
+    (RANDOM() * 1000 + 50)::NUMERIC::MONEY, -- Random transaction amounts
+    NOW() - (RANDOM() * INTERVAL '90 days'), -- Random past dates
+    CASE WHEN RANDOM() > 0.5 THEN 'completed' ELSE 'pending' END, -- Random status
+    account_id,
+    CASE 
+        WHEN RANDOM() < 0.25 THEN 'Amazon'
+        WHEN RANDOM() < 0.50 THEN 'Walmart'
+        WHEN RANDOM() < 0.75 THEN 'Target'
+        ELSE 'BestBuy'
+    END -- Random merchant names
+FROM wob.account
+WHERE status = 'active'; -- Insert only for active accounts
 
--- Create a new transaction for the first user account with user id `0716ba97-1e28-49d2-9582-c99ecbac4c63` for $100
-INSERT INTO wob.transaction(amount, datetime, status, account_id, merchant_name)
-VALUES (
-           100.00::money,
-           current_timestamp(3),
-           'paid',
-           (SELECT account_id FROM wob.account WHERE client_id = '0716ba97-1e28-49d2-9582-c99ecbac4c63' LIMIT 1),
-           'abcde'
-       )
-RETURNING transaction_id;
+-- Insert bank cards for accounts without cards
+INSERT INTO wob.bank_card (bank_card_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit, card_type_id)
+SELECT 
+    gen_random_uuid(),
+    CURRENT_DATE + INTERVAL '5 years', -- Expiry date 5 years from now
+    LPAD(FLOOR(RANDOM() * 1e16)::TEXT, 16, '0'), -- Random 16-digit card numbers
+    LPAD(FLOOR(RANDOM() * 1e4)::TEXT, 4, '0'), -- Random 4-digit PINs
+    LPAD(FLOOR(RANDOM() * 1e3)::TEXT, 3, '0'), -- Random 3-digit CVVs
+    'active',
+    a.account_id,
+    ((2000 + FLOOR(RANDOM() * 3000))::numeric)::money, -- Daily limits between $2000 and $5000
+    (SELECT card_type_id FROM wob.card_type ORDER BY RANDOM() LIMIT 1) -- Random card type
+FROM wob.account a
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM wob.bank_card bc
+    WHERE bc.account_id = a.account_id
+);
 
 -- Create a new address, and use the `address_id` to create a new user
 WITH new_address AS (
