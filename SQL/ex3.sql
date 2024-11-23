@@ -1,7 +1,7 @@
 -- INSERT STATEMENTS
 
 ---Insert Transactions Based on Account Status
-INSERT INTO wob.transaction (transaction_id, amount, datetime, status, account_id, merchant_name)
+INSERT INTO wob.transaction (amount, datetime, status, account_id, merchant_name)
 SELECT 
     (RANDOM() * 1000 + 50)::NUMERIC::MONEY, -- Random transaction amounts
     NOW() - (RANDOM() * INTERVAL '90 days'), -- Random past dates
@@ -17,7 +17,7 @@ FROM wob.account
 WHERE status = 'active'; -- Insert only for active accounts
 
 -- Insert bank cards for accounts without cards
-INSERT INTO wob.bank_card (bank_card_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit, card_type_id)
+INSERT INTO wob.bank_card (expiry_date, card_number, pin, verification_value, status, account_id, daily_limit, card_type_id)
 SELECT 
     CURRENT_DATE + INTERVAL '5 years', -- Expiry date 5 years from now
     LPAD(FLOOR(RANDOM() * 1e16)::TEXT, 16, '0'), -- Random 16-digit card numbers
@@ -33,7 +33,6 @@ WHERE NOT EXISTS (
     FROM wob.bank_card bc
     WHERE bc.account_id = a.account_id
 );
-
 
 -- Create a new address, and use the `address_id` to create a new user
 WITH new_address AS (

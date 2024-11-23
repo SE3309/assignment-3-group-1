@@ -1,5 +1,6 @@
 -- VIEW STATEMENTS
 
+-- Create a view that shows the client_id, client_name, student_number, account_type_id, balance, and branch_location for all active accounts.
 CREATE VIEW wob.active_clients_accounts AS
 SELECT 
     c.client_id,                
@@ -19,7 +20,7 @@ JOIN
 WHERE 
     a.status = 'Active'; -- Only include active accounts
 
-
+-- Create a view that shows the account_id, client_id, account_balance, account_status, account_type_id, and branch_id for all active accounts.
 CREATE OR REPLACE VIEW wob.account_balances_view AS
 SELECT
     a.account_id,
@@ -32,6 +33,3 @@ FROM
     wob.account a
 WHERE
     a.status = 'Active';  -- Only include active accounts
-
-
-

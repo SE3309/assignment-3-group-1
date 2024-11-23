@@ -36,7 +36,6 @@ WHERE a.status = 'active'
 GROUP BY c.client_id, c.user_id
 ORDER BY total_balance DESC; -- Order by total balance
 
-
 -- Get the average bank account balance for each account type
 SELECT 
     AVG(a.balance::numeric)::money AS average_bank_account_balance,
@@ -51,7 +50,6 @@ HAVING AVG(a.balance::numeric) > 100000 -- Include only account types with a hig
 ORDER BY average_bank_account_balance DESC;
 
 -- Get all users with their total balance, ordered by total balance from highest to lowest
--- Get the average bank account balance for each account type
 SELECT 
     u.user_id, 
     u.name, 
@@ -65,7 +63,6 @@ JOIN wob.account a ON a.client_id = c.client_id
 WHERE a.balance > 0::money -- Include accounts with a positive balance
 GROUP BY u.user_id, u.name, u.phone_number, u.email, c.status
 ORDER BY total_balance DESC;
-
 
 ---Retrieve High-Transaction Accounts with Notifications
 SELECT 
@@ -127,4 +124,4 @@ FROM wob."user" u
 WHERE POSITION(' ' IN u.name) > 0 -- Ensure names contain at least one space
 GROUP BY family_name
 ORDER BY family_name_count DESC
-FETCH FIRST 12 ROWS ONLY; 
+FETCH FIRST 12 ROWS ONLY;
