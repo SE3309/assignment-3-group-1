@@ -73,31 +73,31 @@ function generateMerchantName() {
 
 // Function to create dummy address data
 async function createAddresses(countInThousands) {
-    let addressObjs = [];
-    for (let i = 0; i < countInThousands; i++) {
-        const addresses = await getRandomAddresses(1000);
-        addresses.forEach(address => addressObjs.push(addressToObj(address)));
+    let addressObjs = []; // Initialize an empty array to store address objects
+    for (let i = 0; i < countInThousands; i++) { // Loop to create addresses in batches of 1000
+        const addresses = await getRandomAddresses(1000); // Fetch 1000 random addresses
+        addresses.forEach(address => addressObjs.push(addressToObj(address))); // Convert each address to an object and add to the array
     }
 
-    const client = await createClient();
-    await client.connect();
-    const res = await client.query(
+    const client = await createClient(); // Create a new database client
+    await client.connect(); // Connect to the database
+    const res = await client.query( // Insert the address objects into the database
         `INSERT INTO wob.address(street_number, street_name, postal_code, city, province, country)
          SELECT street_number, street_name, postal_code, city, province, country
          FROM jsonb_to_recordset($1::jsonb)
-             AS t (
-                 street_number integer
+                  AS t (
+                        street_number integer
                  , street_name text
                  , postal_code character(6)
                  , city text, province text
                  , country text
-             )
+                 )
          RETURNING address_id;`,
-        [JSON.stringify(addressObjs)]
+        [JSON.stringify(addressObjs)] // Convert the array of address objects to a JSON string
     );
-    await client.end();
+    await client.end(); // Close the database connection
 
-    addressIds = res.rows.map(row => row.address_id);
+    addressIds = res.rows.map(row => row.address_id); // Store the returned address IDs in the global array
 }
 
 // Function to create dummy branch data
