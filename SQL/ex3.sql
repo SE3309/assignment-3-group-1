@@ -1,9 +1,8 @@
 -- INSERT STATEMENTS
 
 ---Insert Transactions Based on Account Status
-INSERT INTO wob.transaction (transaction_id, amount, datetime, status, account_id, merchant_name)
+INSERT INTO wob.transaction (amount, datetime, status, account_id, merchant_name)
 SELECT 
-    gen_random_uuid(),
     (RANDOM() * 1000 + 50)::NUMERIC::MONEY, -- Random transaction amounts
     NOW() - (RANDOM() * INTERVAL '90 days'), -- Random past dates
     CASE WHEN RANDOM() > 0.5 THEN 'completed' ELSE 'pending' END, -- Random status
@@ -18,13 +17,12 @@ FROM wob.account
 WHERE status = 'active'; -- Insert only for active accounts
 
 -- Insert bank cards for accounts without cards
-INSERT INTO wob.bank_card (bank_card_id, expiry_date, card_number, pin, verification_value, status, account_id, daily_limit, card_type_id)
+INSERT INTO wob.bank_card (expiry_date, card_number, pin, verification_value, status, account_id, daily_limit, card_type_id)
 SELECT 
-    gen_random_uuid(),
     CURRENT_DATE + INTERVAL '5 years', -- Expiry date 5 years from now
     LPAD(FLOOR(RANDOM() * 1e16)::TEXT, 16, '0'), -- Random 16-digit card numbers
-    LPAD(FLOOR(RANDOM() * 1e4)::TEXT, 4, '0'), -- Random 4-digit PINs
-    LPAD(FLOOR(RANDOM() * 1e3)::TEXT, 3, '0'), -- Random 3-digit CVVs
+    LPAD(FLOOR(RANDOM() * 1e4)::TEXT, 64, '0'), -- Random 4-digit PINs
+    LPAD(FLOOR(RANDOM() * 1e3)::TEXT, 64, '0'), -- Random 3-digit CVVs
     'active',
     a.account_id,
     ((2000 + FLOOR(RANDOM() * 3000))::numeric)::money, -- Daily limits between $2000 and $5000
@@ -39,16 +37,16 @@ WHERE NOT EXISTS (
 -- Create a new address, and use the `address_id` to create a new user
 WITH new_address AS (
     INSERT INTO wob.address(street_number, street_name, city, province, country, postal_code)
-        VALUES (1151, 'Richmond Street', 'London', 'Ontario', 'Canada', 'N6A3K7')
-        RETURNING address_id
+    VALUES (1151, 'Richmond Street', 'London', 'Ontario', 'Canada', 'N6A3K7')
+    RETURNING address_id
 )
 INSERT INTO wob."user"(name, phone_number, email, date_of_birth, password, address_id)
 VALUES (
-           'John Doe',
-           '+1 (647) 373-0304',
-           'john.doe.1234@gmail.com',
-           '2001-09-28',
-           '66f23a50a26a03ee8dd01cf5449d408b4137ef3037d55d819ab28d1c9d902983',
-           (SELECT address_id FROM new_address)
-       )
+    'John Doe',
+    '+1 (647) 373-0304',
+    'john.doe.1234@gmail.com',
+    '2001-09-28',
+    '66f23a50a26a03ee8dd01cf5449d408b4137ef3037d55d819ab28d1c9d902983',
+    (SELECT address_id FROM new_address)
+)
 RETURNING user_id;

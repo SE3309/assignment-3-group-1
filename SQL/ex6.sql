@@ -9,7 +9,6 @@ WHERE transaction_id IN (
     LIMIT 10 
 );
 
-
 -- Update pending loan applications, change their status and interest_id, and insert as new loans
 WITH updated_applications AS (
     -- Update loan applications that are pending
@@ -48,8 +47,6 @@ new_loans AS (
 -- Retrieve results to confirm
 SELECT * FROM new_loans;
 
-
----
 WITH high_transaction_accounts AS (
     -- Identify accounts with more than 100 transactions
     SELECT 
