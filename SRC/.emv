@@ -1,0 +1,7 @@
+DB_USER='postgres'
+DB_HOST='localhost'
+DB_DATABASE='Western One Bank'
+DB_SCHEMA='wob'
+DB_PASSWORD='IzanagiI246!'
+DB_PORT='5432'
+SALT='aPsjhnXAgVaz'
