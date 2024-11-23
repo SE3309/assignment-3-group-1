@@ -15,6 +15,7 @@ let chequingAccounts = [];
 let transactions = [];
 let cardTypeIds = [];
 let bankCards = [];
+let loans = [];
 
 async function truncateAllTables() {
     const client = await createClient();
@@ -577,6 +578,128 @@ async function createCardApplications() {
     });
 }
 
+async function createLoans() {
+    const statues = [
+        "performing",
+        "late",
+        "overdue",
+        "default",
+        "inactive"
+    ];
+
+    clientIds.forEach(clientId => {
+        if (Math.random() <= 0.3) {
+            const loan = {
+                id: null,
+                client_id: clientId,
+                principal: 1_000 * (Math.floor(Math.random() * 15) + 1),
+                interest_accumulated: 0,
+                term_months: 12 * (Math.floor(Math.random() * 3) + 3),
+                monthly_payment_amount: 0,
+                status: statues[Math.floor(Math.random() * statues.length)]
+            }
+            loan.monthly_payment_amount = loan.principal / loan.term_months;
+
+            loans.push(loan);
+        }
+    });
+
+    let client = await createClient();
+    await client.connect();
+    let res = await client.query(
+        `INSERT INTO wob.interest(interest_rate, interest_type)
+         VALUES (0.05, 'simple')
+         RETURNING interest_id;`,
+        []
+    );
+    await client.end();
+
+    const interestId = res.rows[0].interest_id;
+    loans.forEach(loan => loan.interest_id = interestId);
+
+    client = await createClient();
+    await client.connect();
+    res = await client.query(
+        `INSERT INTO wob.loan(client_id, principal, interest_accumulated, term_months, monthly_payment_amount, status, interest_id)
+         SELECT client_id, principal, interest_accumulated, term_months, monthly_payment_amount, status, interest_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                client_id uuid
+                , principal money
+                , interest_accumulated money
+                , term_months integer
+                , monthly_payment_amount money
+                , status text
+                , interest_id uuid
+             )
+         RETURNING loan_id;`,
+        [JSON.stringify(loans)]
+    );
+    await client.end();
+
+    const loanIds = res.rows.map(row => row.loan_id);
+    loans.forEach(function (loan, i) {
+        loan.id = loanIds[i];
+    });
+}
+
+async function createLoanApplications() {
+    const applications = [];
+    loans.forEach(loan => {
+        const application = {
+            id: null,
+            amount: loan.principal,
+            status: "approved",
+            collateral: "None",
+            notes: "Approved",
+            client_id: loan.client_id,
+            staff_id: staffIds[Math.floor(Math.random() * staffIds.length)],
+            interest_id: loan.interest_id
+        }
+
+        applications.push(application);
+
+        if (Math.random() >= 0.95) {
+            const application = {
+                id: null,
+                amount: loan.principal,
+                status: "rejected",
+                collateral: "None",
+                notes: "I didn't feel like approving this one either </3",
+                client_id: loan.client_id,
+                staff_id: staffIds[Math.floor(Math.random() * staffIds.length)],
+                interest_id: loan.interest_id
+            }
+
+            applications.push(application);
+        }
+    });
+
+    const client = await createClient();
+    await client.connect();
+    const res = await client.query(
+        `INSERT INTO wob.loan_application(amount, status, collateral, notes, client_id, staff_id, interest_id)
+         SELECT amount, status, collateral, notes, client_id, staff_id, interest_id
+         FROM jsonb_to_recordset($1::jsonb)
+             AS t (
+                amount money
+                , status text
+                , collateral text
+                , notes text
+                , client_id uuid
+                , staff_id uuid
+                , interest_id uuid
+             )
+         RETURNING loan_application_id;`,
+        [JSON.stringify(applications)]
+    );
+    await client.end();
+
+    const applicationIds = res.rows.map(row => row.loan_application_id);
+    applications.forEach(function (application, i) {
+        application.id = applicationIds[i];
+    });
+}
 async function main() {
     await truncateAllTables().then(_ => console.log("done truncating tables"));
 
@@ -592,6 +715,9 @@ async function main() {
     await createCardTypes().then(_ => console.log("done creating card types"));
     await createCards().then(_ => console.log("done creating cards"));
     await createCardApplications().then(_ => console.log("done creating card applications"));
+
+    await createLoans().then(_ => console.log("done creating loans"));
+    await createLoanApplications().then(_ => console.log("done creating loan applications"));
 }
 
 main()
