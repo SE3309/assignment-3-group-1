@@ -347,6 +347,15 @@ async function createAccounts() {
     });
 }
 
+const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function generateMerchantName() {
+    let name = "";
+    for (let i = 0; i < 5; i++) {
+        name += characters[Math.floor(Math.random() * characters.length)];
+    }
+    return name;
+}
+
 async function createTransactions() {
     const statuses = [
         "pending",
@@ -356,9 +365,9 @@ async function createTransactions() {
         "paid",
         "failed"
     ];
-    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     chequingAccounts.forEach(account => {
         const numTransactions = Math.floor(Math.random() * 100) + 1;
+        const tempArr = [];
         for (let i = 0; i < numTransactions; i++) {
             const transaction = {
                 id: null,
@@ -366,11 +375,12 @@ async function createTransactions() {
                 datetime: new Date(Math.floor(Math.random() * 50) + 1975, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28), Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60)),
                 status: statuses[Math.floor(Math.random() * statuses.length)],
                 account_id: account.id,
-                merchant_name: characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)] + characters[Math.floor(Math.random() * characters.length)]
+                merchant_name: generateMerchantName()
             };
-
-            transactions.push(transaction);
+            tempArr.push(transaction);
         }
+
+        transactions.push(...tempArr);
     });
 
     // Need to split the transactions into chunks of 1,000,000
@@ -379,9 +389,10 @@ async function createTransactions() {
     for (let i = 0; i < transactions.length; i += 1_000_000) {
         transactionsSplit.push(transactions.slice(i, i + 1_000_000));
     }
+
+    const client = await createClient();
+    await client.connect();
     for (const transactions of transactionsSplit) {
-        const client = await createClient();
-        await client.connect();
         const res = await client.query(
             `INSERT INTO wob.transaction(amount, datetime, status, account_id, merchant_name)
              SELECT amount, datetime, status, account_id, merchant_name
@@ -396,13 +407,13 @@ async function createTransactions() {
              RETURNING transaction_id;`,
             [JSON.stringify(transactions)]
         );
-        await client.end();
 
         const transactionIds = res.rows.map(row => row.transaction_id);
         transactions.forEach(function (transaction, i) {
             transaction.id = transactionIds[i];
         });
     }
+    await client.end();
 }
 
 async function createCardTypes() {
@@ -576,7 +587,7 @@ async function main() {
 
     await createAccountTypes().then(_ => console.log("done creating account types"));
     await createAccounts().then(_ => console.log("done creating accounts"));
-    // await createTransactions().then(_ => console.log("done creating transactions"));
+    await createTransactions().then(_ => console.log("done creating transactions"));
 
     await createCardTypes().then(_ => console.log("done creating card types"));
     await createCards().then(_ => console.log("done creating cards"));
