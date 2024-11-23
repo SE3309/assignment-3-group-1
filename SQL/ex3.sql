@@ -26,9 +26,18 @@ WITH new_address AS (
     INSERT INTO wob.address(street_number, street_name, city, province, country, postal_code)
     VALUES (1151, 'Richmond Street', 'London', 'Ontario', 'Canada', 'N6A3K7')
     RETURNING address_id
+    VALUES (1151, 'Richmond Street', 'London', 'Ontario', 'Canada', 'N6A3K7')
+    RETURNING address_id
 )
 INSERT INTO wob."user"(name, phone_number, email, date_of_birth, password, address_id)
 VALUES (
+    'John Doe',
+    '+1 (647) 373-0304',
+    'john.doe.1234@gmail.com',
+    '2001-09-28',
+    '66f23a50a26a03ee8dd01cf5449d408b4137ef3037d55d819ab28d1c9d902983',
+    (SELECT address_id FROM new_address)
+)
     'John Doe',
     '+1 (647) 373-0304',
     'john.doe.1234@gmail.com',
